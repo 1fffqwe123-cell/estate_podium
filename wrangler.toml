@@ -1,38 +1,18 @@
+
 name = "estate-podium"
-main = "server.ts"
+main = "src/worker.ts"
 compatibility_date = "2026-05-25"
 compatibility_flags = ["nodejs_compat"]
 
-# =========================
-# ENV VARIABLES
-# =========================
 [vars]
 NODE_ENV = "production"
 JWT_SECRET = "estate_podium_secret_key_2026_secured"
 
-# =========================
-# D1 DATABASE (estate_podium_db)
-# =========================
 [[d1_databases]]
 binding = "DB"
 database_name = "estate_podium_db"
 database_id = "fcd30881-5e7e-4e04-b205-c3c8b2b63a9e"
 
-# =========================
-# R2 STORAGE (estate-images)
-# =========================
 [[r2_buckets]]
 binding = "R2_IMAGERY"
 bucket_name = "estate-images"
-
-# =========================
-# PAGES FRONTEND
-# =========================
-[site]
-bucket = "./dist"
-
-# =========================
-# PRODUCTION SETTINGS
-# =========================
-[env.production]
-vars = { NODE_ENV = "production" }
