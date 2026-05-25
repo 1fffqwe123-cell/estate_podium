@@ -7,6 +7,7 @@ import AuthDash from './pages/AuthDash';
 import About from './pages/About';
 import { ThemeProvider } from './components/ThemeContext';
 import { Building2, ShieldCheck, Mail, MapPin, Phone, HelpCircle } from 'lucide-react';
+import { safeApiFetch } from './utils';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('home');
@@ -54,13 +55,10 @@ export default function App() {
     const checkSession = async () => {
       let loggedInUser = null;
       try {
-        const response = await fetch('/api/auth/me');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.user) {
-            loggedInUser = data.user;
-            setUser(data.user);
-          }
+        const res = await safeApiFetch('/api/auth/me');
+        if (res.success && res.data?.user) {
+          loggedInUser = res.data.user;
+          setUser(res.data.user);
         }
       } catch (err) {
         console.error('فشل في فحص مصادقة الحساب عبر السرفر.', err);
@@ -139,11 +137,10 @@ export default function App() {
       const path = window.location.pathname;
       let currentUser = null;
       try {
-        const response = await fetch('/api/auth/me');
-        if (response.ok) {
-          const data = await response.json();
-          currentUser = data.user;
-          setUser(data.user);
+        const res = await safeApiFetch('/api/auth/me');
+        if (res.success && res.data?.user) {
+          currentUser = res.data.user;
+          setUser(res.data.user);
         }
       } catch (err) {
         console.error(err);
@@ -215,7 +212,7 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await safeApiFetch('/api/auth/logout', { method: 'POST' });
       setUser(null);
       window.history.pushState(null, '', '/');
       setActiveTab('home');

@@ -329,6 +329,36 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 
+// Robust JSON Interceptor Middleware to guarantee proper response structure
+app.use((req: any, res: any, next: any) => {
+  const originalJson = res.json;
+  res.json = function (body: any) {
+    if (body && typeof body === 'object') {
+      if (body.error && body.success === undefined) {
+        body.success = false;
+        body.message = body.error;
+      }
+      if (res.statusCode >= 400) {
+        body.success = false;
+        if (!body.message) {
+          body.message = body.error || 'حدث خطأ في معالجة طلبك.';
+        }
+      } else {
+        if (body.success === undefined) {
+          body.success = true;
+        }
+      }
+    } else if (body === undefined || body === null || body === '') {
+      body = {
+        success: res.statusCode < 400,
+        message: res.statusCode < 400 ? 'تمت العملية بنجاح' : 'فشل تنفيذ الطلب.'
+      };
+    }
+    return originalJson.call(this, body);
+  };
+  next();
+});
+
 // Expose public uploads folder
 app.use('/uploads', express.static(uploadsDir));
 
@@ -1063,6 +1093,17 @@ app.get('/api/owner/analytics', authenticateUser, requireOwner, (req, res) => {
   } catch (err: any) {
     return res.status(500).json({ error: 'تحليل البيانات الخدمي واجه أخطاء: ' + err.message });
   }
+});
+
+// App-wide global exception handling middleware
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error('[Global Exception Handler]', err);
+  const errMsg = err?.message || 'حدث خطأ داخلي في الخادم.';
+  res.status(500).json({
+    success: false,
+    error: errMsg,
+    message: errMsg
+  });
 });
 
 

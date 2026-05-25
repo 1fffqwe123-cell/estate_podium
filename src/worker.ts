@@ -95,47 +95,71 @@ function jsonResponse(data: any, status = 200, headersInit?: HeadersInit): Respo
   headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie');
   headers.set('Access-Control-Allow-Credentials', 'true');
+
+  if (data && typeof data === 'object') {
+    if (data.error && data.success === undefined) {
+      data.success = false;
+      data.message = data.error;
+    }
+    if (status >= 400) {
+      data.success = false;
+      if (!data.message) {
+        data.message = data.error || 'حدث خطأ غير متوقع.';
+      }
+    } else {
+      if (data.success === undefined) {
+        data.success = true;
+      }
+    }
+  } else if (data === undefined || data === null || data === '') {
+    data = {
+      success: status < 400,
+      message: status < 400 ? 'تمت العملية بنجاح.' : 'فشل تنفيذ الطلب.'
+    };
+  }
+
   return new Response(JSON.stringify(data), { status, headers });
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-    const path = url.pathname;
-    const method = request.method;
+    try {
+      const url = new URL(request.url);
+      const path = url.pathname;
+      const method = request.method;
 
-    // Handle OPTIONS Preflight Requests safely
-    if (method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie',
-          'Access-Control-Allow-Credentials': 'true'
-        }
-      });
-    }
-
-    // -------------------------------------------------------------------------
-    // R2 STATIC IMAGE PROVIDER ROUTE (/uploads/*)
-    // -------------------------------------------------------------------------
-    if (path.startsWith('/uploads/')) {
-      const r2Key = path.substring('/uploads/'.length);
-      try {
-        const object = await env.R2_IMAGERY.get(r2Key);
-        if (!object) {
-          return new Response('Image Not Found in Cloudflare R2', { status: 404 });
-        }
-        const responseHeaders = new Headers();
-        object.writeHttpMetadata(responseHeaders);
-        responseHeaders.set('etag', object.httpEtag);
-        responseHeaders.set('Cache-Control', 'public, max-age=31536000');
-        return new Response(object.body, { headers: responseHeaders });
-      } catch (err: any) {
-        return new Response('Error retrieving from R2: ' + err.message, { status: 500 });
+      // Handle OPTIONS Preflight Requests safely
+      if (method === 'OPTIONS') {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie',
+            'Access-Control-Allow-Credentials': 'true'
+          }
+        });
       }
-    }
+
+      // -------------------------------------------------------------------------
+      // R2 STATIC IMAGE PROVIDER ROUTE (/uploads/*)
+      // -------------------------------------------------------------------------
+      if (path.startsWith('/uploads/')) {
+        const r2Key = path.substring('/uploads/'.length);
+        try {
+          const object = await env.R2_IMAGERY.get(r2Key);
+          if (!object) {
+            return new Response('Image Not Found in Cloudflare R2', { status: 404 });
+          }
+          const responseHeaders = new Headers();
+          object.writeHttpMetadata(responseHeaders);
+          responseHeaders.set('etag', object.httpEtag);
+          responseHeaders.set('Cache-Control', 'public, max-age=31536000');
+          return new Response(object.body, { headers: responseHeaders });
+        } catch (err: any) {
+          return new Response('Error retrieving from R2: ' + err.message, { status: 500 });
+        }
+      }
 
     // -------------------------------------------------------------------------
     // JWT AUTHENTICATION API ENDPOINTS
@@ -784,5 +808,12 @@ export default {
 
     // Fallback: If not an API route and we are inside Cloudflare Pages/Worker environment, pass to static assets or return 404
     return new Response('API Routing Fallback: End of route pool', { status: 404 });
+    } catch (outerErr: any) {
+      return jsonResponse({
+        success: false,
+        error: outerErr?.message || 'خطأ داخلي فادح في منصة الكلاود فلير',
+        message: outerErr?.message || 'خطأ داخلي فادح في منصة الكلاود فلير'
+      }, 500);
+    }
   }
 };

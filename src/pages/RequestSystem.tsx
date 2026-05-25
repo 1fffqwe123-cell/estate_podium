@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { IRAQ_PROVINCES } from '../types';
 import { Send, CheckCircle, ShieldAlert, BadgeInfo, ArrowLeftCircle } from 'lucide-react';
+import { safeApiFetch } from '../utils';
 
 interface RequestSystemProps {
   setActiveTab: (tab: string) => void;
@@ -30,7 +31,7 @@ export default function RequestSystem({ setActiveTab }: RequestSystemProps) {
     setError(null);
 
     try {
-      const response = await fetch('/api/requests', {
+      const res = await safeApiFetch('/api/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -44,9 +45,8 @@ export default function RequestSystem({ setActiveTab }: RequestSystemProps) {
         })
       });
 
-      const resJson = await response.json();
-      if (!response.ok) {
-        throw new Error(resJson.error || 'فشل المخدم العقاري عن إتمام التسجيل.');
+      if (!res.success) {
+        throw new Error(res.error || 'فشل المخدم العقاري عن إتمام التسجيل.');
       }
 
       setSuccess(true);

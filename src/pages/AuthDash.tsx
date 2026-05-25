@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { IRAQ_PROVINCES, PROPERTY_CATEGORIES, Property, PropertyRequest, Agency } from '../types';
-import { formatPrice, formatArea, formatDate } from '../utils';
+import { formatPrice, formatArea, formatDate, safeApiFetch } from '../utils';
 import { 
   Building2, Users, FileText, BarChart3, PlusCircle, Trash2, Edit3, KeyRound, 
   MapPin, Phone, MessageCircle, ShieldCheck, MailWarning, Upload, AlertCircle, RefreshCw, Eye
@@ -85,39 +85,34 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
 
     try {
       // 1. Fetch Requests (Filtered on server by Province context or role owner)
-      const reqRes = await fetch('/api/requests');
-      if (reqRes.ok) {
-        const reqData = await reqRes.json();
-        setRequests(reqData.requests || []);
+      const reqRes = await safeApiFetch('/api/requests');
+      if (reqRes.success && reqRes.data) {
+        setRequests(reqRes.data.requests || []);
       }
 
       if (user.role === 'owner') {
         // 2. Fetch Owner Analytics
-        const ansRes = await fetch('/api/owner/analytics');
-        if (ansRes.ok) {
-          const ansData = await ansRes.json();
-          setAnalytics(ansData);
+        const ansRes = await safeApiFetch('/api/owner/analytics');
+        if (ansRes.success && ansRes.data) {
+          setAnalytics(ansRes.data);
         }
 
         // 3. Fetch Registered Agencies
-        const ageRes = await fetch('/api/agencies');
-        if (ageRes.ok) {
-          const ageData = await ageRes.json();
-          setAgencies(ageData.agencies || []);
+        const ageRes = await safeApiFetch('/api/agencies');
+        if (ageRes.success && ageRes.data) {
+          setAgencies(ageRes.data.agencies || []);
         }
 
         // 4. Fetch All Properties (Global catalog)
-        const prpRes = await fetch('/api/properties?limit=100');
-        if (prpRes.ok) {
-          const prpData = await prpRes.json();
-          setAllProperties(prpData.properties || []);
+        const prpRes = await safeApiFetch('/api/properties?limit=100');
+        if (prpRes.success && prpRes.data) {
+          setAllProperties(prpRes.data.properties || []);
         }
       } else {
         // Agency mode: fetch only own properties
-        const prpRes = await fetch(`/api/properties?agency_id=${user.agencyId}&limit=100`);
-        if (prpRes.ok) {
-          const prpData = await prpRes.json();
-          setAgencyProperties(prpData.properties || []);
+        const prpRes = await safeApiFetch(`/api/properties?agency_id=${user.agencyId}&limit=100`);
+        if (prpRes.success && prpRes.data) {
+          setAgencyProperties(prpRes.data.properties || []);
         }
       }
     } catch (e) {
@@ -153,18 +148,17 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
     setAuthError(null);
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const res = await safeApiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'خطأ في اسم المستخدم أو كلمة المرور.');
+      if (!res.success || !res.data) {
+        throw new Error(res.error || 'خطأ في اسم المستخدم أو كلمة المرور.');
       }
 
-      onLoginSuccess(data.user);
+      onLoginSuccess(res.data.user);
     } catch (err: any) {
       setAuthError(err.message || 'فشل تسجيل الدخول. يرجى التحقق من الحساب.');
     } finally {
@@ -183,7 +177,7 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
     }
 
     try {
-      const response = await fetch('/api/auth/change-credentials', {
+      const res = await safeApiFetch('/api/auth/change-credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -192,9 +186,8 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
         })
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'فشل التحديث الأمني.');
+      if (!res.success) {
+        throw new Error(res.error || 'فشل التحديث الأمني.');
       }
 
       setChgSuccess('تم تحديث البيانات الأمنية لحسابك بنجاح.');
@@ -219,7 +212,7 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
     }
 
     try {
-      const response = await fetch('/api/agencies', {
+      const res = await safeApiFetch('/api/agencies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -231,9 +224,8 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
         })
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'فشل في تسجيل الوكالة عبر الخادم.');
+      if (!res.success) {
+        throw new Error(res.error || 'فشل في تسجيل الوكالة عبر الخادم.');
       }
 
       setAgencyFormSuccess('تم تسجيل الوكالة بنشاط وربطها بالمحافظات بنجاح.');
@@ -269,7 +261,7 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
     if (!editingAgency) return;
 
     try {
-      const response = await fetch(`/api/agencies/${editingAgency.id}`, {
+      const res = await safeApiFetch(`/api/agencies/${editingAgency.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -280,9 +272,8 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
         })
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'فشل حفظ التعديلات بطلب السيرفر.');
+      if (!res.success) {
+        throw new Error(res.error || 'فشل حفظ التعديلات بطلب السيرفر.');
       }
 
       setEditingAgency(null);
@@ -296,13 +287,12 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
     if (!window.confirm('🚨 تحذير: هل أنت متأكد من حذف هذه الوكالة بالكامل؟ سيؤدي ذلك لحذف حسابها وعقاراتها التابعة لها كلياً.')) return;
     
     try {
-      const response = await fetch(`/api/agencies/${id}`, {
+      const res = await safeApiFetch(`/api/agencies/${id}`, {
         method: 'DELETE'
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'فشل حذف الوكالة.');
+      if (!res.success) {
+        throw new Error(res.error || 'فشل حذف الوكالة.');
       }
 
       loadDashboardData();
@@ -327,16 +317,16 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
     }
 
     try {
-      const response = await fetch('/api/upload', {
+      const res = await safeApiFetch('/api/upload', {
         method: 'POST',
         body: formData
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'فشل رفع الصور المحددة.');
+      if (!res.success || !res.data) {
+        throw new Error(res.error || 'فشل رفع الصور المحددة.');
       }
 
+      const data = res.data;
       if (data.urls && data.urls.length > 0) {
         if (!propCoverImage) {
           setPropCoverImage(data.urls[0]);
@@ -413,15 +403,14 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
 
     try {
       const url = editingProperty ? `/api/properties/${editingProperty.id}` : '/api/properties';
-      const response = await fetch(url, {
+      const res = await safeApiFetch(url, {
         method: editingProperty ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'حدث خطأ بالخلية المسؤولة عن العقار.');
+      if (!res.success) {
+        throw new Error(res.error || 'حدث خطأ بالخلية المسؤولة عن العقار.');
       }
 
       setPropFormSuccess(editingProperty ? 'تم تحديث بيانات العقار بنجاح!' : 'تم نشر وإدراج العقار بالبث الرئيسي بنجاح!');
@@ -438,13 +427,12 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
     if (!window.confirm('هل أنت متأكد من رغبتك بحذف هذا الإعلان العقاري نهائياً؟')) return;
 
     try {
-      const response = await fetch(`/api/properties/${id}`, {
+      const res = await safeApiFetch(`/api/properties/${id}`, {
         method: 'DELETE'
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'فشل حذف العقار.');
+      if (!res.success) {
+        throw new Error(res.error || 'فشل حذف العقار.');
       }
 
       loadDashboardData();

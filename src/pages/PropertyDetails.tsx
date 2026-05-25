@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Property } from '../types';
-import { formatPrice, formatArea, formatDate } from '../utils';
+import { formatPrice, formatArea, formatDate, safeApiFetch } from '../utils';
 import { Phone, MessageCircle, MapPin, Layers, Home, Calendar, ArrowRight, ArrowLeft, Star, Share2 } from 'lucide-react';
 
 interface PropertyDetailsProps {
@@ -22,12 +22,12 @@ export default function PropertyDetails({ propertyId, onBack, onSelectProperty }
 
     const loadDetails = async () => {
       try {
-        const response = await fetch(`/api/properties/${propertyId}`);
-        if (!response.ok) {
-          throw new Error('فشل جلب تفاصيل الوحدة المطلوبة من الخادم العقاري.');
+        const res = await safeApiFetch(`/api/properties/${propertyId}`);
+        if (!res.success || !res.data) {
+          throw new Error(res.error || 'فشل جلب تفاصيل الوحدة المطلوبة من الخادم العقاري.');
         }
         
-        const resJson = await response.json();
+        const resJson = res.data;
         setData({
           property: resJson.property,
           similar: resJson.similar || []

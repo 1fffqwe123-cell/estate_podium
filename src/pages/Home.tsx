@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Property, PROPERTY_CATEGORIES, IRAQ_PROVINCES } from '../types';
 import PropertyCard from '../components/PropertyCard';
 import { Search, SlidersHorizontal, RefreshCw, Layers, X, PlusCircle, BookmarkCheck } from 'lucide-react';
+import { safeApiFetch } from '../utils';
 
 interface HomeProps {
   onSelectProperty: (id: number) => void;
@@ -57,12 +58,12 @@ export default function Home({ onSelectProperty, setActiveTab }: HomeProps) {
       params.append('page', currentPage.toString());
       params.append('limit', '6');
 
-      const response = await fetch(`/api/properties?${params.toString()}`);
-      if (!response.ok) {
-        throw new Error('فشل جلب العقارات من المخدم.');
+      const res = await safeApiFetch(`/api/properties?${params.toString()}`);
+      if (!res.success || !res.data) {
+        throw new Error(res.error || 'فشل جلب العقارات من المخدم.');
       }
 
-      const data = await response.json();
+      const data = res.data;
       
       if (isLoadMore) {
         setProperties(prev => [...prev, ...data.properties]);
