@@ -1,6 +1,8 @@
 // src/worker.ts - Cloudflare Worker for Estate Podium (المنصة العقارية)
 // Native API Layer connecting Cloudflare Pages/Workers, Cloudflare D1 database, and Cloudflare R2 file storage.
 
+import bcrypt from 'bcryptjs';
+
 declare global {
   interface D1Database {
     prepare(query: string): any;
@@ -197,7 +199,6 @@ export default {
         // For D1 we can verify accurately.
         // Let's do a secure compatibility check or rely on a standard verify.
         // (For maximum standard compatibility: we run a bcrypt check)
-        const bcrypt = await import('bcryptjs');
         const passwordsMatch = bcrypt.compareSync(password, user.password_hash);
         if (!passwordsMatch) {
           return jsonResponse({ error: 'خطأ في اسم المستخدم أو كلمة المرور' }, 401);
@@ -296,7 +297,6 @@ export default {
           if (newPassword.length < 6) {
             return jsonResponse({ error: 'يجب أن لا تقل كلمة المرور عن 6 حروف.' }, 400);
           }
-          const bcrypt = await import('bcryptjs');
           const newHash = bcrypt.hashSync(newPassword, 10);
           await env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?;').bind(newHash, user.userId).run();
         }
@@ -707,7 +707,6 @@ export default {
           return jsonResponse({ error: 'اسم مستخدم الوكالة المودع مسجل مسبقاً.' }, 400);
         }
 
-        const bcrypt = await import('bcryptjs');
         const hash = bcrypt.hashSync(password, 10);
 
         // Setup User transaction safely inside worker using individual queries
