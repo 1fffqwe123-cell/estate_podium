@@ -1,0 +1,6 @@
+{
+  "name": "Estate Podium",
+  "description": "المنصة العقارية - Premium Arabic Real Estate marketplace for properties and listings",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

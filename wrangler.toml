@@ -1,0 +1,29 @@
+# wrangler.toml - Cloudflare Configuration for Estate Podium (المنصة العقارية)
+
+name = "estate-podium"
+main = "server.ts"
+compatibility_date = "2026-05-25"
+
+# Environment variables
+[vars]
+NODE_ENV = "production"
+JWT_SECRET = "estate_podium_secret_key_2026_secured"
+
+# 1. Cloudflare D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "estate-podium-d1"
+database_id = "your-cloudflare-d1-database-uuid-here"
+
+# 2. Cloudflare R2 Bucket binding (For property imagery gallery)
+[[r2_buckets]]
+binding = "R2_IMAGERY"
+bucket_name = "estate-podium-imagery"
+
+# Pages asset-serving routing configuration
+[site]
+bucket = "./dist"
+
+# Production Pages router details
+[env.production]
+vars = { NODE_ENV = "production" }
