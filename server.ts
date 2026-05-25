@@ -446,7 +446,31 @@ app.get(['/admin', '/agency', '/dashboard'], (req, res, next) => {
 // -----------------------------------------------------------------------------
 
 // --- Authentication ---
-app.post('/api/auth/login', (req, res) => {
+app.all('/api/login', (req, res, next) => {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({
+      success: false,
+      error: 'Method Not Allowed',
+      message: 'هذا الإجراء غير مسموح لهذه الطريقة.'
+    });
+  }
+  next();
+});
+
+app.all('/api/auth/login', (req, res, next) => {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({
+      success: false,
+      error: 'Method Not Allowed',
+      message: 'هذا الإجراء غير مسموح لهذه الطريقة.'
+    });
+  }
+  next();
+});
+
+app.post(['/api/login', '/api/auth/login'], (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'يرجى إدخال اسم المستخدم وكلمة المرور' });

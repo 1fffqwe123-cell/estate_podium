@@ -165,8 +165,18 @@ export default {
     // JWT AUTHENTICATION API ENDPOINTS
     // -------------------------------------------------------------------------
 
-    // 1. POST /api/auth/login
-    if (path === '/api/auth/login' && method === 'POST') {
+    // 1. POST /api/login and /api/auth/login (Login)
+    if (path === '/api/login' || path === '/api/auth/login') {
+      if (method !== 'POST') {
+        const h = new Headers();
+        h.set('Allow', 'POST');
+        return jsonResponse({
+          success: false,
+          error: 'Method Not Allowed',
+          message: 'هذا الإجراء غير مسموح لطريقة الطلب المستخدمة.'
+        }, 405, h);
+      }
+
       try {
         const { username, password } = await request.json() as any;
         if (!username || !password) {
@@ -804,6 +814,14 @@ export default {
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 500);
       }
+    }
+
+    if (path.startsWith('/api/')) {
+      return jsonResponse({
+        success: false,
+        error: 'المسار غير موجود',
+        message: 'عذراً، المسار البرمجي المطلوب غير متوفر.'
+      }, 404);
     }
 
     // Fallback: If not an API route and we are inside Cloudflare Pages/Worker environment, pass to static assets or return 404

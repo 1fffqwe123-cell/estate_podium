@@ -148,7 +148,7 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
     setAuthError(null);
 
     try {
-      const res = await safeApiFetch('/api/auth/login', {
+      const res = await safeApiFetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
