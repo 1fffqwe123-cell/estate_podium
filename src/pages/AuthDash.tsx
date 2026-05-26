@@ -109,6 +109,7 @@ const loadDashboardData = async () => {
       if (prpRes.success && prpRes.data) {
         setAllProperties(prpRes.data.properties || []);
       }
+
     } else {
       // Agency mode
       const prpRes = await safeApiFetch(
@@ -119,56 +120,13 @@ const loadDashboardData = async () => {
         setAgencyProperties(prpRes.data.properties || []);
       }
     }
+
   } catch (e) {
     console.error('Error loading backend dashboard:', e);
   } finally {
     setPanelLoading(false);
   }
 };
-
-useEffect(() => {
-  if (!user) return;
-
-  loadDashboardData();
-
-  if (user.role === 'owner') {
-    setActivePanel('analytics');
-  } else {
-    setActivePanel('my-properties');
-  }
-}, [user]);
-
-  // ---------------------------------------------------------------------------
-  // AUTH ROUTINES
-  // ---------------------------------------------------------------------------
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!username || !password) {
-      setAuthError('يرجى تعبئة اسم المستخدم وكلمة المرور للدخول.');
-      return;
-    }
-
-    setAuthLoading(true);
-    setAuthError(null);
-
-    try {
-      const res = await safeApiFetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-
-      if (!res.success || !res.data) {
-        throw new Error(res.error || 'خطأ في اسم المستخدم أو كلمة المرور.');
-      }
-
-      onLoginSuccess(res.data.user);
-    } catch (err: any) {
-      setAuthError(err.message || 'فشل تسجيل الدخول. يرجى التحقق من الحساب.');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
 
   const handleUpdateCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
