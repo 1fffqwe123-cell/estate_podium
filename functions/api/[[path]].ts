@@ -120,7 +120,7 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
   const method = request.method;
 
   // Global override of jsonResponse helper to bind CORS Origins and format errors
-  const jsonResponse = (data: any, status = 200, headersInit?: HeadersInit): Response => {
+  const jsonResponse = (payload: any, status = 200, headersInit?: HeadersInit): Response => {
     const headers = new Headers(headersInit);
     headers.set('Content-Type', 'application/json; charset=utf-8');
     headers.set('Access-Control-Allow-Origin', origin);
@@ -128,29 +128,37 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
     headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie');
     headers.set('Access-Control-Allow-Credentials', 'true');
 
-    if (data && typeof data === 'object') {
-      if (data.error && data.success === undefined) {
-        data.success = false;
-        data.message = data.error;
-      }
-      if (status >= 400) {
-        data.success = false;
-        if (!data.message) {
-          data.message = data.error || 'حدث خطأ غير متوقع.';
-        }
+    let formattedBody: any;
+
+    if (payload && typeof payload === 'object') {
+      if ('success' in payload && 'data' in payload && 'error' in payload) {
+        formattedBody = {
+          success: payload.success,
+          data: payload.data,
+          error: payload.error
+        };
+      } else if (payload.error) {
+        formattedBody = {
+          success: false,
+          data: null,
+          error: payload.error || 'حدث خطأ ما.'
+        };
       } else {
-        if (data.success === undefined) {
-          data.success = true;
-        }
+        formattedBody = {
+          success: status < 400,
+          data: payload,
+          error: null
+        };
       }
-    } else if (data === undefined || data === null || data === '') {
-      data = {
+    } else {
+      formattedBody = {
         success: status < 400,
-        message: status < 400 ? 'تمت العملية بنجاح.' : 'فشل تنفيذ الطلب.'
+        data: payload,
+        error: status >= 400 ? 'حدث خطأ في معالجة الطلب.' : null
       };
     }
 
-    return new Response(JSON.stringify(data), { status, headers });
+    return new Response(JSON.stringify(formattedBody), { status, headers });
   };
 
   // Handle CORS Preflights
@@ -168,6 +176,115 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
 
   // Bind bucket safely
   const bucket = env.IMAGES || env.R2_IMAGERY;
+
+  // Auto initialize tables if they don't exist
+  try {
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('owner', 'agency'))
+      );
+    `).run();
+
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS agencies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        name TEXT NOT NULL,
+        phone TEXT,
+        subscription_status TEXT NOT NULL CHECK(subscription_status IN ('active', 'inactive')) DEFAULT 'active',
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `).run();
+
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS agency_locations (
+        agency_id INTEGER NOT NULL,
+        province TEXT NOT NULL,
+        PRIMARY KEY(agency_id, province),
+        FOREIGN KEY(agency_id) REFERENCES agencies(id) ON DELETE CASCADE
+      );
+    `).run();
+
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS properties (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agency_id INTEGER DEFAULT 1,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        price REAL NOT NULL,
+        location TEXT,
+        bedrooms INTEGER NOT NULL DEFAULT 0,
+        bathrooms INTEGER NOT NULL DEFAULT 1,
+        area REAL NOT NULL DEFAULT 0,
+        type TEXT NOT NULL CHECK(type IN ('sale', 'rent')),
+        image_key TEXT,
+        featured INTEGER NOT NULL DEFAULT 0,
+        category TEXT DEFAULT 'Houses' CHECK(category IN ('Houses', 'Apartments', 'Land', 'Commercial')),
+        city TEXT DEFAULT '',
+        province TEXT DEFAULT '',
+        cover_image TEXT DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+    `).run();
+
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS property_images (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        property_id INTEGER NOT NULL,
+        image_url TEXT NOT NULL,
+        FOREIGN KEY(property_id) REFERENCES properties(id) ON DELETE CASCADE
+      );
+    `).run();
+
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        full_name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        province TEXT NOT NULL,
+        city TEXT NOT NULL,
+        buy_or_rent TEXT NOT NULL CHECK(buy_or_rent IN ('buy', 'rent')),
+        budget REAL NOT NULL,
+        description TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `).run();
+
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agency_id INTEGER NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        FOREIGN KEY(agency_id) REFERENCES agencies(id) ON DELETE CASCADE
+      );
+    `).run();
+
+    // Seed core users safely if not present
+    const adminCount = await env.DB.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'owner';").first() as any;
+    if (!adminCount || adminCount.count === 0) {
+      await env.DB.prepare("INSERT INTO users (id, username, password_hash, role) VALUES (1, 'Alihassan123', ?, 'owner');")
+        .bind(bcrypt.hashSync('aliali7777', 10)).run();
+    }
+
+    const agencyCount = await env.DB.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'agency';").first() as any;
+    if (!agencyCount || agencyCount.count === 0) {
+      await env.DB.prepare("INSERT INTO users (id, username, password_hash, role) VALUES (2, 'AlRafidain_Estate', ?, 'agency');")
+        .bind(bcrypt.hashSync('agency123', 10)).run();
+
+      await env.DB.prepare("INSERT OR IGNORE INTO agencies (id, user_id, name, phone, subscription_status, created_at) VALUES (1, 2, ?, ?, 'active', ?);")
+        .bind('مكتب الرافدين للعقارات', '+964 770 123 4567', new Date().toISOString()).run();
+
+      await env.DB.prepare("INSERT OR IGNORE INTO agency_locations (agency_id, province) VALUES (1, ?);").bind('بغداد').run();
+      await env.DB.prepare("INSERT OR IGNORE INTO agency_locations (agency_id, province) VALUES (1, ?);").bind('الديوانية').run();
+    }
+  } catch (err) {
+    console.error("Auto DB setup warning:", err);
+  }
 
   try {
     // -------------------------------------------------------------------------
@@ -232,7 +349,10 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
       if (method !== 'POST') {
         return jsonResponse({ error: 'Method Not Allowed' }, 405);
       }
-      const { username, password } = await request.json() as any;
+      const parsedBody = await request.json() as any;
+      const username = String(parsedBody?.username ?? '').trim();
+      const password = String(parsedBody?.password ?? '').trim();
+
       if (!username || !password) {
         return jsonResponse({ error: 'يرجى إدخال اسم المستخدم وكلمة المرور' }, 400);
       }
@@ -242,7 +362,12 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
         return jsonResponse({ error: 'خطأ في اسم المستخدم أو كلمة المرور' }, 401);
       }
 
-      const match = bcrypt.compareSync(password, user.password_hash);
+      const userHash = String(user.password_hash ?? user.password ?? '');
+      if (!userHash) {
+        return jsonResponse({ error: 'خطأ في اسم المستخدم أو كلمة المرور' }, 401);
+      }
+
+      const match = bcrypt.compareSync(password, userHash);
       if (!match) {
         return jsonResponse({ error: 'خطأ في اسم المستخدم أو كلمة المرور' }, 401);
       }
@@ -261,9 +386,9 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
       }
 
       const sessionPayload = {
-        userId: user.id,
-        username: user.username,
-        role: user.role,
+        userId: user.id ?? 0,
+        username: user.username ?? "",
+        role: user.role ?? "agency",
         agencyId,
         agencyName,
         iat: Math.floor(Date.now() / 1000),
@@ -275,15 +400,18 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
       headers.set('Set-Cookie', `token=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=86400`);
 
       return jsonResponse({
-        status: 'success',
-        token,
-        user: {
-          id: user.id,
-          username: user.username,
-          role: user.role,
-          agencyId,
-          agencyName
-        }
+        success: true,
+        data: {
+          token,
+          user: {
+            id: user.id ?? 0,
+            username: user.username ?? "",
+            role: user.role ?? "agency",
+            agencyId,
+            agencyName
+          }
+        },
+        error: null
       }, 200, headers);
     }
 
@@ -598,7 +726,20 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
       }
 
       const bodyData = await request.json() as any;
-      const { title, description, price, type, location, category, city, province, bedrooms, bathrooms, area, cover_image, images, image_key } = bodyData;
+      const title = (bodyData?.title ?? '').trim();
+      const description = (bodyData?.description ?? '').trim();
+      const price = parseFloat(bodyData?.price) || 0;
+      const type = (bodyData?.type ?? 'sale').trim();
+      const location = bodyData?.location ?? '';
+      const category = (bodyData?.category ?? 'Houses').trim();
+      const city = (bodyData?.city ?? '').trim();
+      const province = (bodyData?.province ?? 'بغداد').trim();
+      const bedrooms = parseInt(bodyData?.bedrooms) || 0;
+      const bathrooms = parseInt(bodyData?.bathrooms) || 1;
+      const area = parseFloat(bodyData?.area) || 0;
+      const cover_image = bodyData?.cover_image ?? '';
+      const images = bodyData?.images ?? [];
+      const image_key = bodyData?.image_key ?? null;
 
       if (!title || !description || !price || !type) {
         return jsonResponse({ error: 'يرجى إدخال الحقول الإجبارية للعقار.' }, 400);
@@ -606,14 +747,14 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
 
       if (isPagesSchema) {
         const finalLocation = location || `${province || 'العراق'} - ${city || ''}`;
-        const finalKey = image_key || extractKey(cover_image);
+        const finalKey = image_key || extractKey(cover_image) || null;
 
         const result = await env.DB.prepare(`
           INSERT INTO properties (title, description, price, location, bedrooms, bathrooms, area, type, image_key, featured, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          title, description, parseFloat(price), finalLocation,
-          parseInt(bedrooms) || 0, parseInt(bathrooms) || 1, parseFloat(area) || 0,
+          title, description, price, finalLocation,
+          bedrooms, bathrooms, area,
           type, finalKey, 0, new Date().toISOString()
         ).run();
 
@@ -627,8 +768,8 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
           INSERT INTO properties (agency_id, title, description, price, type, category, city, province, bedrooms, area, cover_image, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          user.agencyId, title, description, parseFloat(price), type, category || 'Houses', city || '', province || 'البصرة',
-          parseInt(bedrooms) || 0, parseFloat(area) || 0, cover_image || '', new Date().toISOString()
+          user.agencyId ?? 1, title, description, price, type, category, city, province,
+          bedrooms, area, cover_image, new Date().toISOString()
         ).run();
 
         const propertyId = result.meta.last_row_id;
@@ -651,19 +792,32 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
       const id = parseInt(idStr);
 
       const bodyData = await request.json() as any;
-      const { title, description, price, type, location, category, city, province, bedrooms, bathrooms, area, cover_image, images, image_key } = bodyData;
+      const title = (bodyData?.title ?? '').trim();
+      const description = (bodyData?.description ?? '').trim();
+      const price = parseFloat(bodyData?.price) || 0;
+      const type = (bodyData?.type ?? 'sale').trim();
+      const location = bodyData?.location ?? '';
+      const category = (bodyData?.category ?? 'Houses').trim();
+      const city = (bodyData?.city ?? '').trim();
+      const province = (bodyData?.province ?? 'بغداد').trim();
+      const bedrooms = parseInt(bodyData?.bedrooms) || 0;
+      const bathrooms = parseInt(bodyData?.bathrooms) || 1;
+      const area = parseFloat(bodyData?.area) || 0;
+      const cover_image = bodyData?.cover_image ?? '';
+      const images = bodyData?.images ?? [];
+      const image_key = bodyData?.image_key ?? null;
 
       if (isPagesSchema) {
         const finalLocation = location || `${province || 'العراق'} - ${city || ''}`;
-        const finalKey = image_key || extractKey(cover_image);
+        const finalKey = image_key || extractKey(cover_image) || null;
 
         await env.DB.prepare(`
           UPDATE properties 
           SET title = ?, description = ?, price = ?, location = ?, bedrooms = ?, bathrooms = ?, area = ?, type = ?, image_key = ?, featured = ?
           WHERE id = ?;
         `).bind(
-          title, description, parseFloat(price), finalLocation,
-          parseInt(bedrooms) || 0, parseInt(bathrooms) || 1, parseFloat(area) || 0,
+          title, description, price, finalLocation,
+          bedrooms, bathrooms, area,
           type, finalKey, 0, id
         ).run();
 
@@ -680,8 +834,8 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
           SET title = ?, description = ?, price = ?, type = ?, category = ?, city = ?, province = ?, bedrooms = ?, area = ?, cover_image = ?
           WHERE id = ?;
         `).bind(
-          title, description, parseFloat(price), type, category || 'Houses', city || '', province || 'البصرة',
-          parseInt(bedrooms) || 0, parseFloat(area) || 0, cover_image || '', id
+          title, description, price, type, category, city, province,
+          bedrooms, area, cover_image, id
         ).run();
 
         if (images && Array.isArray(images)) {

@@ -101,7 +101,7 @@ function base64url(str: string): string {
 }
 
 // Standard CORS and JSON Headers Response helpers
-function jsonResponse(data: any, status = 200, headersInit?: HeadersInit): Response {
+function jsonResponse(payload: any, status = 200, headersInit?: HeadersInit): Response {
   const headers = new Headers(headersInit);
   headers.set('Content-Type', 'application/json; charset=utf-8');
   headers.set('Access-Control-Allow-Origin', '*');
@@ -109,29 +109,37 @@ function jsonResponse(data: any, status = 200, headersInit?: HeadersInit): Respo
   headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie');
   headers.set('Access-Control-Allow-Credentials', 'true');
 
-  if (data && typeof data === 'object') {
-    if (data.error && data.success === undefined) {
-      data.success = false;
-      data.message = data.error;
-    }
-    if (status >= 400) {
-      data.success = false;
-      if (!data.message) {
-        data.message = data.error || 'حدث خطأ غير متوقع.';
-      }
+  let formattedBody: any;
+
+  if (payload && typeof payload === 'object') {
+    if ('success' in payload && 'data' in payload && 'error' in payload) {
+      formattedBody = {
+        success: payload.success,
+        data: payload.data,
+        error: payload.error
+      };
+    } else if (payload.error) {
+      formattedBody = {
+        success: false,
+        data: null,
+        error: payload.error || 'حدث خطأ ما.'
+      };
     } else {
-      if (data.success === undefined) {
-        data.success = true;
-      }
+      formattedBody = {
+        success: status < 400,
+        data: payload,
+        error: null
+      };
     }
-  } else if (data === undefined || data === null || data === '') {
-    data = {
+  } else {
+    formattedBody = {
       success: status < 400,
-      message: status < 400 ? 'تمت العملية بنجاح.' : 'فشل تنفيذ الطلب.'
+      data: payload,
+      error: status >= 400 ? 'حدث خطأ في معالجة الطلب.' : null
     };
   }
 
-  return new Response(JSON.stringify(data), { status, headers });
+  return new Response(JSON.stringify(formattedBody), { status, headers });
 }
 
 export default {
@@ -242,7 +250,10 @@ export default {
       }
 
       try {
-        const { username, password } = await request.json() as any;
+        const parsedBody = await request.json() as any;
+        const username = String(parsedBody?.username ?? '').trim();
+        const password = String(parsedBody?.password ?? '').trim();
+
         if (!username || !password) {
           return jsonResponse({ error: 'يرجى إدخال اسم المستخدم وكلمة المرور' }, 400);
         }
@@ -253,15 +264,12 @@ export default {
           return jsonResponse({ error: 'خطأ في اسم المستخدم أو كلمة المرور' }, 401);
         }
 
-        // Because we hash passwords, we verify using a simple scrypt/pbkdf2 or SHA-256 for Workers.
-        // For security compatibility with Node's bcrypt, when deploying, you can use bcryptjs or simple SHA compatibility.
-        // Here, we provide an robust native compatibility layer. If pbkdf2 or standard sha matches:
-        // (Note: we seeded securely using standard crypt or check bcrypt hashes)
-        // Let's import bcryptjs dynamically or use standard verification.
-        // For D1 we can verify accurately.
-        // Let's do a secure compatibility check or rely on a standard verify.
-        // (For maximum standard compatibility: we run a bcrypt check)
-        const passwordsMatch = bcrypt.compareSync(password, user.password_hash);
+        const userHash = String(user.password_hash ?? user.password ?? '');
+        if (!userHash) {
+          return jsonResponse({ error: 'خطأ في اسم المستخدم أو كلمة المرور' }, 401);
+        }
+
+        const passwordsMatch = bcrypt.compareSync(password, userHash);
         if (!passwordsMatch) {
           return jsonResponse({ error: 'خطأ في اسم المستخدم أو كلمة المرور' }, 401);
         }
@@ -279,9 +287,9 @@ export default {
         }
 
         const sessionPayload = {
-          userId: user.id,
-          username: user.username,
-          role: user.role,
+          userId: user.id ?? 0,
+          username: user.username ?? "",
+          role: user.role ?? "agency",
           agencyId,
           agencyName,
           iat: Math.floor(Date.now() / 1000),
@@ -295,15 +303,18 @@ export default {
         headers.set('Set-Cookie', `token=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=86400`);
 
         return jsonResponse({
-          status: 'success',
-          token,
-          user: {
-            id: user.id,
-            username: user.username,
-            role: user.role,
-            agencyId,
-            agencyName
-          }
+          success: true,
+          data: {
+            token,
+            user: {
+              id: user.id ?? 0,
+              username: user.username ?? "",
+              role: user.role ?? "agency",
+              agencyId,
+              agencyName
+            }
+          },
+          error: null
         }, 200, headers);
 
       } catch (err: any) {
