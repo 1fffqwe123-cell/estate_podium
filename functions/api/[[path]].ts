@@ -1062,7 +1062,15 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
       const idStr = path.split('/').pop() || '';
       const id = parseInt(idStr);
 
-      const { name, phone, subscription_status, provinces } = await request.json() as any;
+      const bodyData = await request.json() as any;
+      const name = (bodyData?.name ?? '').trim();
+      const phone = (bodyData?.phone ?? '').trim();
+      const subscription_status = (bodyData?.subscription_status ?? 'active').trim();
+      const provinces = bodyData?.provinces;
+
+      if (!name) {
+        return jsonResponse({ error: 'اسم الوكالة مطلوب.' }, 400);
+      }
 
       await env.DB.prepare('UPDATE agencies SET name = ?, phone = ?, subscription_status = ? WHERE id = ?;').bind(
         name, phone, subscription_status, id
@@ -1071,11 +1079,13 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
       if (provinces && Array.isArray(provinces)) {
         await env.DB.prepare('DELETE FROM agency_locations WHERE agency_id = ?;').bind(id).run();
         for (const prov of provinces) {
-          await env.DB.prepare('INSERT INTO agency_locations (agency_id, province) VALUES (?, ?);').bind(id, prov).run();
+          if (prov) {
+            await env.DB.prepare('INSERT INTO agency_locations (agency_id, province) VALUES (?, ?);').bind(id, String(prov).trim()).run();
+          }
         }
       }
 
-      return jsonResponse({ status: 'success', message: 'تم تحديث الوكالة والمحافظات بنجاح.' });
+      return jsonResponse({ success: true, message: 'تم تحديث الوكالة والمحافظات بنجاح.' });
     }
 
     if (path.startsWith('/api/agencies/') && method === 'DELETE') {

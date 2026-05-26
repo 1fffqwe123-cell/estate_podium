@@ -188,19 +188,21 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
         body: JSON.stringify({ username, password })
       });
 
-      if (!res.success || !res.data) {
-        throw new Error(res.error || res.message || 'خطأ في اسم المستخدم أو كلمة المرور.');
+      if (!res?.success || !res?.data) {
+        throw new Error(res?.error || res?.message || 'خطأ في اسم المستخدم أو كلمة المرور.');
       }
 
-      if (res.data.token) {
-        localStorage.setItem('token', res.data.token);
+      const userToken = res?.data?.token;
+      if (userToken) {
+        localStorage.setItem('token', userToken);
       }
 
-      if (!res.data.user) {
+      const userData = res?.data?.user;
+      if (!userData) {
         throw new Error('لم يتم إرجاع بيانات حساب المستخدم من الخادم.');
       }
 
-      onLoginSuccess(res.data.user);
+      onLoginSuccess(userData);
     } catch (err: any) {
       setAuthError(err.message || 'فشل تسجيل الدخول. يرجى التحقق من الحساب وسلامة الشبكة.');
     } finally {
@@ -364,16 +366,16 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
         body: formData
       });
 
-      if (!res.success || !res.data) {
-        throw new Error(res.error || 'فشل رفع الصور المحددة.');
+      if (!res?.success || !res?.data) {
+        throw new Error(res?.error || 'فشل رفع الصور المحددة.');
       }
 
-      const data = res.data;
-      if (data.urls && data.urls.length > 0) {
+      const uploadedUrls = res?.data?.urls ?? [];
+      if (uploadedUrls.length > 0) {
         if (!propCoverImage) {
-          setPropCoverImage(data.urls[0]);
+          setPropCoverImage(uploadedUrls[0]);
         }
-        setPropGallery(prev => [...prev, ...data.urls]);
+        setPropGallery(prev => [...prev, ...uploadedUrls]);
         setPropFormSuccess('تم رفع وتجهيز صورك بنجاح في السحابة.');
       }
     } catch (err: any) {

@@ -834,7 +834,15 @@ export default {
       const id = parseInt(idStr);
 
       try {
-        const { name, phone, subscription_status, provinces } = await request.json() as any;
+        const bodyData = await request.json() as any;
+        const name = (bodyData?.name ?? '').trim();
+        const phone = (bodyData?.phone ?? '').trim();
+        const subscription_status = (bodyData?.subscription_status ?? 'active').trim();
+        const provinces = bodyData?.provinces;
+
+        if (!name) {
+          return jsonResponse({ error: 'اسم الوكالة مطلوب.' }, 400);
+        }
 
         await env.DB.prepare('UPDATE agencies SET name = ?, phone = ?, subscription_status = ? WHERE id = ?;').bind(
           name, phone, subscription_status, id
@@ -843,11 +851,13 @@ export default {
         if (provinces && Array.isArray(provinces)) {
           await env.DB.prepare('DELETE FROM agency_locations WHERE agency_id = ?;').bind(id).run();
           for (const prov of provinces) {
-            await env.DB.prepare('INSERT INTO agency_locations (agency_id, province) VALUES (?, ?);').bind(id, prov).run();
+            if (prov) {
+              await env.DB.prepare('INSERT INTO agency_locations (agency_id, province) VALUES (?, ?);').bind(id, String(prov).trim()).run();
+            }
           }
         }
 
-        return jsonResponse({ status: 'success', message: 'تم تحديث بيانات الوكالة والمحافظات المخصصة لها.' });
+        return jsonResponse({ success: true, message: 'تم تحديث بيانات الوكالة والمحافظات المخصصة لها.' });
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 500);
       }
