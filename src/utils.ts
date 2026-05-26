@@ -1,7 +1,8 @@
+const API_BASE = "https://estate-api.iraq-estate.workers.dev";
+
 export function formatPrice(price: number): string {
   if (price >= 1000000000) {
     const bill = price / 1000000000;
-    // Format to 2 decimal places if needed
     return `${bill.toLocaleString('ar-IQ', { maximumFractionDigits: 1 })} مليار د.ع`;
   }
   if (price >= 1000000) {
@@ -27,69 +28,56 @@ export function formatDate(dateString: string): string {
       month: 'long',
       day: 'numeric'
     });
-  } catch (e) {
+  } catch {
     return dateString;
   }
 }
 
 export async function safeApiFetch<T = any>(
-  url: string,
-  options?: RequestInit
+  endpoint: string,
+  options: RequestInit = {}
 ): Promise<{ success: boolean; data?: T; error?: string; message?: string }> {
   try {
-    const response = await fetch(url, options);
-    const rawText = await response.text();
-    
-    if (!response.ok) {
-      console.error(`[API Error] HTTP ${response.status} on ${options?.method || 'GET'} ${url}`);
-      console.error('Raw response text:', rawText);
-      
-      try {
-        const errJson = JSON.parse(rawText);
-        return {
-          success: false,
-          error: errJson.error || errJson.message || `فشل الاستجابة: كود الحالة ${response.status}`,
-          message: errJson.message || errJson.error || `فشل الاستجابة: كود الحالة ${response.status}`
-        };
-      } catch (e) {
-        return {
-          success: false,
-          error: `خطأ من الخادم (${response.status}): ${rawText.substring(0, 150) || 'استجابة فارغة'}`,
-          message: `خطأ من الخادم (${response.status}): ${rawText.substring(0, 150) || 'استجابة فارغة'}`
-        };
+    const url = `${API_BASE}${endpoint}`;
+
+    const response = await fetch(url, {
+      ...options,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {})
       }
-    }
+    });
 
-    if (!rawText || rawText.trim() === '') {
-      return {
-        success: true,
-        message: 'استجابة فارغة',
-        data: {} as T
-      };
-    }
+    const text = await response.text();
 
+    let data: any = null;
     try {
-      const parsed = JSON.parse(rawText);
-      return {
-        success: true,
-        data: parsed,
-        message: parsed?.message
-      };
-    } catch (parseErr: any) {
-      console.error('[API JSON Error] Failed to parse JSON. Raw body:', rawText);
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      // إذا الرد مو JSON
+      data = null;
+    }
+
+    if (!response.ok) {
       return {
         success: false,
-        error: `استجابة غير صالحة من السرفر: ${parseErr.message}`,
-        message: `استجابة غير صالحة من السرفر: ${parseErr.message}`
+        error: data?.error || data?.message || text || `HTTP ${response.status}`,
+        message: data?.message || data?.error || text || `HTTP ${response.status}`
       };
     }
+
+    return {
+      success: true,
+      data,
+      message: data?.message
+    };
+
   } catch (err: any) {
-    console.error(`[Network Exception] Request failed to ${url}:`, err);
     return {
       success: false,
-      error: `فشل الاتصال بالشبكة أو الخادم: ${err.message || err}`,
-      message: `فشل الاتصال بالشبكة أو الخادم: ${err.message || err}`
+      error: err.message || "Network Error",
+      message: err.message || "Network Error"
     };
   }
-}
-
+            }
