@@ -1,10 +1,7 @@
-const API_BASE: string = import.meta.env.PROD
-  ? 'https://estate-api.iraq-estate.workers.dev'
-  : '';
-
 export function formatPrice(price: number): string {
   if (price >= 1000000000) {
     const bill = price / 1000000000;
+    // Format to 2 decimal places if needed
     return `${bill.toLocaleString('ar-IQ', { maximumFractionDigits: 1 })} مليار د.ع`;
   }
   if (price >= 1000000) {
@@ -30,7 +27,7 @@ export function formatDate(dateString: string): string {
       month: 'long',
       day: 'numeric'
     });
-  } catch {
+  } catch (e) {
     return dateString;
   }
 }
@@ -40,84 +37,90 @@ export async function safeApiFetch<T = any>(
   options: RequestInit = {}
 ): Promise<{ success: boolean; data?: T; error?: string; message?: string }> {
   try {
-    let finalUrl: string;
-
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      finalUrl = url;
-    } else if (url.startsWith('/api/') || url.startsWith('/uploads/')) {
-      finalUrl = `${API_BASE}${url}`;
-    } else {
-      finalUrl = url;
+    // 1. Clean and normalize relative paths to point to absolute Cloudflare Workers production domain
+    let finalUrl = url;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      const cleanPath = url.startsWith('/') ? url : `/${url}`;
+      finalUrl = `https://estate-api.iraq-estate.workers.dev${cleanPath}`;
     }
 
+    // 2. Clone headers and inject dynamic Authorization token from LocalStorage safely
     const headers = new Headers(options.headers || {});
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }
+    
+    // 3. Complete and assign cloned request options with COR/Credential overrides
+    const finalOptions: RequestInit = {
+      ...options,
+      headers,
+      mode: 'cors' // Force CORS mode explicitly
+    };
 
-    let response: Response;
-
-    try {
-      response = await fetch(finalUrl, {
-        ...options,
-        headers,
-        mode: 'cors',
-        credentials: 'omit'
-      });
-    } catch (err: any) {
-      console.error('NETWORK_ERROR:', err);
-      return {
-        success: false,
-        error: 'NETWORK_ERROR',
-        message: 'تعذر الاتصال بالخادم'
-      };
+    // Manage credentials field safely. If it is not explicitly provided, we remove it completely
+    // to bypass strict cross-origin credentials and domain policy exceptions.
+    if (options.credentials) {
+      finalOptions.credentials = options.credentials;
+    } else {
+      if ('credentials' in finalOptions) {
+        delete finalOptions.credentials;
+      }
     }
 
-    const text = await response.text();
-
+    const response = await fetch(finalUrl, finalOptions);
+    const rawText = await response.text();
+    
     if (!response.ok) {
+      console.error(`[API Error] HTTP ${response.status} on ${options.method || 'GET'} ${finalUrl}`);
+      console.error('Raw response text:', rawText);
+      
       try {
-        const json = JSON.parse(text);
+        const errJson = JSON.parse(rawText);
         return {
           success: false,
-          error: json.error || `HTTP_${response.status}`,
-          message: json.message || 'Request failed'
+          error: errJson.error || errJson.message || `NETWORK_ERROR`,
+          message: errJson.message || errJson.error || `خطأ من الخادم (كود الحالة ${response.status})`
         };
-      } catch {
+      } catch (e) {
         return {
           success: false,
-          error: `HTTP_${response.status}`,
-          message: text?.slice(0, 200) || 'Server error'
+          error: `NETWORK_ERROR`,
+          message: `خطأ من الخادم (${response.status}): ${rawText.substring(0, 150) || 'استجابة فارغة'}`
         };
       }
     }
 
-    if (!text) {
+    if (!rawText || rawText.trim() === '') {
       return {
         success: true,
+        message: 'استجابة فارغة',
         data: {} as T
       };
     }
 
     try {
+      const parsed = JSON.parse(rawText);
       return {
         success: true,
-        data: JSON.parse(text)
+        data: parsed,
+        message: parsed?.message
       };
-    } catch {
+    } catch (parseErr: any) {
+      console.error('[API JSON Error] Failed to parse JSON. Raw body:', rawText);
       return {
         success: false,
-        error: 'PARSE_ERROR',
-        message: 'Invalid JSON response'
+        error: `NETWORK_ERROR`,
+        message: `استجابة غير صالحة من السرفر: ${parseErr.message}`
       };
     }
   } catch (err: any) {
+    console.error(`[Network Exception] Request failed to ${url}:`, err);
     return {
       success: false,
       error: 'NETWORK_ERROR',
-      message: err?.message || 'Unknown error'
+      message: `فشل الاتصال بالشبكة أو الخادم: ${err.message || err}`
     };
   }
-          }
+}
+
