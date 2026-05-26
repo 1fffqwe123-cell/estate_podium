@@ -55,7 +55,6 @@ export async function safeApiFetch<T = any>(
     try {
       data = text ? JSON.parse(text) : null;
     } catch {
-      // إذا الرد مو JSON
       data = null;
     }
 
@@ -80,4 +79,4 @@ export async function safeApiFetch<T = any>(
       message: err.message || "Network Error"
     };
   }
-            }
+      
