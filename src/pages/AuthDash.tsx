@@ -83,69 +83,53 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
     if (!user) return;
     setPanelLoading(true);
 
-    try {
-      // 1. Fetch Requests (Filtered on server by Province context or role owner)
-      const reqRes = await safeApiFetch('/api/requests');
-      if (reqRes.success && reqRes.data) {
-        setRequests(reqRes.data.requests || []);
-      }
+    const loadDashboardData = async () => {
+  if (!user) return;
+  setPanelLoading(true);
 
-      if (user.role === 'owner') {
-        // 2. Fetch Owner Analytics
-        const ansRes = await safeApiFetch('/api/owner/analytics');
-        if (ansRes.success && ansRes.data) {
-          setAnalytics(ansRes.data);
-        }
-
-        // 3. Fetch Registered Agencies
-        const ageRes = await safeApiFetch('const API =
-"https://estate-api.iraq-estate.workers.dev";
-
-const res = await fetch(`${API}/api/login`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json"
-  },
-  credentials: "include",
-  body: JSON.stringify({
-    username,
-    password
-  })
-});
-
-const data = await res.json();
-
-if (!res.ok) {
-  throw new Error(data.error || "فشل تسجيل الدخول");
-}
-
-onLoginSuccess(data.user);');
-        if (ageRes.success && ageRes.data) {
-          setAgencies(ageRes.data.agencies || []);
-        }
-
-        // 4. Fetch All Properties (Global catalog)
-        const prpRes = await safeApiFetch('/api/properties?limit=100');
-        if (prpRes.success && prpRes.data) {
-          setAllProperties(prpRes.data.properties || []);
-        }
-      } else {
-        // Agency mode: fetch only own properties
-        const prpRes = await safeApiFetch(`/api/properties?agency_id=${user.agencyId}&limit=100`);
-        if (prpRes.success && prpRes.data) {
-          setAgencyProperties(prpRes.data.properties || []);
-        }
-      }
-    } catch (e) {
-      console.error('Error loading backend dashboard:', e);
-    } finally {
-      setPanelLoading(false);
+  try {
+    // 1. Fetch Requests (Filtered on server by Province context or role owner)
+    const reqRes = await safeApiFetch('/api/requests');
+    if (reqRes.success && reqRes.data) {
+      setRequests(reqRes.data.requests || []);
     }
-  };
 
-  useEffect(() => {
-    if (user) {
-      loadDashboardData();
+    if (user.role === 'owner') {
+      // 2. Fetch Owner Analytics
+      const ansRes = await safeApiFetch('/api/owner/analytics');
+      if (ansRes.success && ansRes.data) {
+        setAnalytics(ansRes.data);
+      }
+
+      // 3. Fetch Registered Agencies
+      const ageRes = await safeApiFetch('/api/agencies');
+      if (ageRes.success && ageRes.data) {
+        setAgencies(ageRes.data.agencies || []);
+      }
+
+      // 4. Fetch All Properties (Global catalog)
+      const prpRes = await safeApiFetch('/api/properties?limit=100');
+      if (prpRes.success && prpRes.data) {
+        setAllProperties(prpRes.data.properties || []);
+      }
+
+    } else {
+      // Agency mode: fetch only own properties
+      const prpRes = await safeApiFetch(
+        `/api/properties?agency_id=${user.agencyId}&limit=100`
+      );
+
+      if (prpRes.success && prpRes.data) {
+        setAgencyProperties(prpRes.data.properties || []);
+      }
+    }
+
+  } catch (e) {
+    console.error('Error loading backend dashboard:', e);
+  } finally {
+    setPanelLoading(false);
+  }
+};
       // Route appropriately
       if (user.role === 'owner') {
         setActivePanel('analytics');
