@@ -160,6 +160,34 @@ const loadDashboardData = async () => {
     }
   };
 
+  const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  setAuthLoading(true);
+  setAuthError(null);
+
+  try {
+    const res = await safeApiFetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username,
+        password
+      })
+    });
+
+    if (!res.success || !res.data) {
+      throw new Error(res.error || 'فشل تسجيل الدخول');
+    }
+
+    onLoginSuccess(res.data.user);
+
+  } catch (err: any) {
+    setAuthError(err.message);
+  } finally {
+    setAuthLoading(false);
+  }
+};
   // ---------------------------------------------------------------------------
   // OWNER ACTION ROUTINES
   // ---------------------------------------------------------------------------
