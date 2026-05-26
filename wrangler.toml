@@ -1,6 +1,6 @@
 # wrangler.toml - Cloudflare Configuration for Estate Podium (المنصة العقارية)
 
-name = "estate-podium"
+name = "estate-api"
 main = "src/worker.ts"
 compatibility_date = "2026-05-25"
 
