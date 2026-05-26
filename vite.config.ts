@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 
+const WORKERS_API = 'https://estate-api.iraq-estate.workers.dev';
+
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
@@ -12,11 +14,23 @@ export default defineConfig(() => {
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      host: '0.0.0.0',
+      port: 5000,
+      allowedHosts: true,
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      proxy: {
+        '/api': {
+          target: WORKERS_API,
+          changeOrigin: true,
+          secure: true,
+        },
+        '/uploads': {
+          target: WORKERS_API,
+          changeOrigin: true,
+          secure: true,
+        },
+      },
     },
   };
 });
