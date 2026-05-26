@@ -744,9 +744,9 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
 
         for (const fileItem of files) {
           if (fileItem instanceof File) {
-            const extension = fileItem.name.split('.').pop() || 'jpg';
+            const extension = (fileItem.name.split('.').pop() || 'jpg').toLowerCase();
             const uuid = crypto.randomUUID();
-            const uniqueFilename = `${uuid}.${extension}`;
+            const uniqueFilename = `properties/${uuid}.${extension}`;
             
             await bucket.put(uniqueFilename, fileItem.stream(), {
               httpMetadata: { contentType: fileItem.type || 'image/jpeg' }
@@ -761,6 +761,9 @@ export const onRequest = async (context: { request: Request; env: Env; params: R
 
         return jsonResponse({
           success: true,
+          data: {
+            urls
+          },
           key: lastKey,
           url: lastUrl,
           urls

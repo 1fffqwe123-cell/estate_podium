@@ -191,22 +191,37 @@ export default {
       }
 
       // -------------------------------------------------------------------------
-      // R2 STATIC IMAGE PROVIDER ROUTE (/uploads/*)
+      // IMAGE SERVING ENDPOINTS (/api/images OR /uploads/*)
       // -------------------------------------------------------------------------
-      if (path.startsWith('/uploads/')) {
-        const r2Key = path.substring('/uploads/'.length);
-        try {
-          const object = await env.R2_IMAGERY.get(r2Key);
-          if (!object) {
-            return new Response('Image Not Found in Cloudflare R2', { status: 404 });
+      if (path === '/api/images' || path.startsWith('/api/images/') || path.startsWith('/uploads/')) {
+        if (method === 'GET') {
+          let r2Key = url.searchParams.get('key') || '';
+          if (!r2Key) {
+            if (path.startsWith('/uploads/')) {
+              r2Key = path.substring('/uploads/'.length);
+            } else if (path.startsWith('/api/images/')) {
+              r2Key = path.substring('/api/images/'.length);
+            }
           }
-          const responseHeaders = new Headers();
-          object.writeHttpMetadata(responseHeaders);
-          responseHeaders.set('etag', object.httpEtag);
-          responseHeaders.set('Cache-Control', 'public, max-age=31536000');
-          return new Response(object.body, { headers: responseHeaders });
-        } catch (err: any) {
-          return new Response('Error retrieving from R2: ' + err.message, { status: 500 });
+
+          if (!r2Key) {
+            return new Response('Missing key parameter or slug', { status: 400 });
+          }
+
+          try {
+            const object = await env.R2_IMAGERY.get(r2Key);
+            if (!object) {
+              return new Response('Image Not Found in Cloudflare R2', { status: 404 });
+            }
+
+            const responseHeaders = new Headers();
+            object.writeHttpMetadata(responseHeaders);
+            responseHeaders.set('etag', object.httpEtag);
+            responseHeaders.set('Cache-Control', 'public, max-age=31536000');
+            return new Response(object.body, { headers: responseHeaders });
+          } catch (err: any) {
+            return new Response('Error retrieving from storage: ' + err.message, { status: 500 });
+          }
         }
       }
 
@@ -514,22 +529,37 @@ export default {
         }
 
         const urls: string[] = [];
+        let lastKey = '';
+        let lastUrl = '';
+
         for (const fileItem of files) {
           if (fileItem instanceof File) {
-            const extension = fileItem.name.split('.').pop() || 'jpg';
-            const uniqueFilename = `property-${Date.now()}-${Math.round(Math.random() * 1e9)}.${extension}`;
+            const extension = (fileItem.name.split('.').pop() || 'jpg').toLowerCase();
+            const uuid = crypto.randomUUID();
+            const uniqueFilename = `properties/${uuid}.${extension}`;
             
             // Upload to Cloudflare R2 bucket
             await env.R2_IMAGERY.put(uniqueFilename, fileItem.stream(), {
               httpMetadata: { contentType: fileItem.type || 'image/jpeg' }
             });
 
-            // The file is immediately serving via /uploads/:key route
-            urls.push(`/uploads/${uniqueFilename}`);
+            // The file is immediately serving via /api/images?key= route
+            const returnUrl = `/api/images?key=${uniqueFilename}`;
+            urls.push(returnUrl);
+            lastKey = uniqueFilename;
+            lastUrl = returnUrl;
           }
         }
 
-        return jsonResponse({ urls });
+        return jsonResponse({
+          success: true,
+          data: {
+            urls
+          },
+          key: lastKey,
+          url: lastUrl,
+          urls
+        });
       } catch (err: any) {
         return jsonResponse({ error: 'فشل في رفع الصور للغيمة: ' + err.message }, 500);
       }
