@@ -76,45 +76,41 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
   const [propFormError, setPropFormError] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
-  // REACTIVE FETCH ACTIONS
-  // ---------------------------------------------------------------------------
-  // Execute unified loading sequence (using real sqlite database backend APIs)
-  const loadDashboardData = async () => {
-    if (!user) return;
-    setPanelLoading(true);
+// REACTIVE FETCH ACTIONS
+// ---------------------------------------------------------------------------
 
-    const loadDashboardData = async () => {
+const loadDashboardData = async () => {
   if (!user) return;
+
   setPanelLoading(true);
 
   try {
-    // 1. Fetch Requests (Filtered on server by Province context or role owner)
+    // 1. Fetch Requests
     const reqRes = await safeApiFetch('/api/requests');
     if (reqRes.success && reqRes.data) {
       setRequests(reqRes.data.requests || []);
     }
 
     if (user.role === 'owner') {
-      // 2. Fetch Owner Analytics
+      // 2. Analytics
       const ansRes = await safeApiFetch('/api/owner/analytics');
       if (ansRes.success && ansRes.data) {
         setAnalytics(ansRes.data);
       }
 
-      // 3. Fetch Registered Agencies
+      // 3. Agencies
       const ageRes = await safeApiFetch('/api/agencies');
       if (ageRes.success && ageRes.data) {
         setAgencies(ageRes.data.agencies || []);
       }
 
-      // 4. Fetch All Properties (Global catalog)
+      // 4. Properties
       const prpRes = await safeApiFetch('/api/properties?limit=100');
       if (prpRes.success && prpRes.data) {
         setAllProperties(prpRes.data.properties || []);
       }
-
     } else {
-      // Agency mode: fetch only own properties
+      // Agency mode
       const prpRes = await safeApiFetch(
         `/api/properties?agency_id=${user.agencyId}&limit=100`
       );
@@ -123,21 +119,24 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
         setAgencyProperties(prpRes.data.properties || []);
       }
     }
-
   } catch (e) {
     console.error('Error loading backend dashboard:', e);
   } finally {
     setPanelLoading(false);
   }
 };
-      // Route appropriately
-      if (user.role === 'owner') {
-        setActivePanel('analytics');
-      } else {
-        setActivePanel('my-properties');
-      }
-    }
-  }, [user]);
+
+useEffect(() => {
+  if (!user) return;
+
+  loadDashboardData();
+
+  if (user.role === 'owner') {
+    setActivePanel('analytics');
+  } else {
+    setActivePanel('my-properties');
+  }
+}, [user]);
 
   // ---------------------------------------------------------------------------
   // AUTH ROUTINES
