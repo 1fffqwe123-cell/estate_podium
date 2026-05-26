@@ -98,7 +98,28 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
         }
 
         // 3. Fetch Registered Agencies
-        const ageRes = await safeApiFetch('/api/agencies');
+        const ageRes = await safeApiFetch('const API =
+"https://estate-api.iraq-estate.workers.dev";
+
+const res = await fetch(`${API}/api/login`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  credentials: "include",
+  body: JSON.stringify({
+    username,
+    password
+  })
+});
+
+const data = await res.json();
+
+if (!res.ok) {
+  throw new Error(data.error || "فشل تسجيل الدخول");
+}
+
+onLoginSuccess(data.user);');
         if (ageRes.success && ageRes.data) {
           setAgencies(ageRes.data.agencies || []);
         }
