@@ -21,15 +21,26 @@ export interface Env {
 
 // Simple Helper to verify JWT token and extract payload in Workers
 async function getAuthenticatedUser(request: Request, env: Env): Promise<any | null> {
-  const cookieHeader = request.headers.get('Cookie') || '';
-  const cookies = Object.fromEntries(
-    cookieHeader.split(';').map(c => {
-      const parts = c.trim().split('=');
-      return [parts[0], parts.slice(1).join('=')];
-    })
-  );
+  let token = '';
 
-  const token = cookies['token'];
+  // 1. Try extracting token from the Authorization: Bearer <token> header First
+  const authHeader = request.headers.get('Authorization') || '';
+  if (authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7).trim();
+  }
+
+  // 2. Fallback to cookie authentication
+  if (!token) {
+    const cookieHeader = request.headers.get('Cookie') || '';
+    const cookies = Object.fromEntries(
+      cookieHeader.split(';').map(c => {
+        const parts = c.trim().split('=');
+        return [parts[0], parts.slice(1).join('=')];
+      })
+    );
+    token = cookies['token'];
+  }
+
   if (!token) return null;
 
   try {
@@ -125,6 +136,42 @@ function jsonResponse(data: any, status = 200, headersInit?: HeadersInit): Respo
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const origin = request.headers.get('Origin') || '*';
+
+    // Local override of jsonResponse helper to bind CORS Origin dynamically
+    const jsonResponse = (data: any, status = 200, headersInit?: HeadersInit): Response => {
+      const headers = new Headers(headersInit);
+      headers.set('Content-Type', 'application/json; charset=utf-8');
+      headers.set('Access-Control-Allow-Origin', origin);
+      headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie');
+      headers.set('Access-Control-Allow-Credentials', 'true');
+
+      if (data && typeof data === 'object') {
+        if (data.error && data.success === undefined) {
+          data.success = false;
+          data.message = data.error;
+        }
+        if (status >= 400) {
+          data.success = false;
+          if (!data.message) {
+            data.message = data.error || 'حدث خطأ غير متوقع.';
+          }
+        } else {
+          if (data.success === undefined) {
+            data.success = true;
+          }
+        }
+      } else if (data === undefined || data === null || data === '') {
+        data = {
+          success: status < 400,
+          message: status < 400 ? 'تمت العملية بنجاح.' : 'فشل تنفيذ الطلب.'
+        };
+      }
+
+      return new Response(JSON.stringify(data), { status, headers });
+    };
+
     try {
       const url = new URL(request.url);
       const path = url.pathname;
@@ -135,7 +182,7 @@ export default {
         return new Response(null, {
           status: 204,
           headers: {
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': origin,
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie',
             'Access-Control-Allow-Credentials': 'true'

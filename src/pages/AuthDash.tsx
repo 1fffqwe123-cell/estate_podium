@@ -76,57 +76,99 @@ export default function AuthDash({ user, onLoginSuccess, setActiveTab }: AuthDas
   const [propFormError, setPropFormError] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
-// REACTIVE FETCH ACTIONS
-// ---------------------------------------------------------------------------
+  // REACTIVE FETCH ACTIONS
+  // ---------------------------------------------------------------------------
+  // Execute unified loading sequence (using real sqlite database backend APIs)
+  const loadDashboardData = async () => {
+    if (!user) return;
+    setPanelLoading(true);
 
-const loadDashboardData = async () => {
-  if (!user) return;
+    try {
+      // 1. Fetch Requests (Filtered on server by Province context or role owner)
+      const reqRes = await safeApiFetch('/api/requests');
+      if (reqRes.success && reqRes.data) {
+        setRequests(reqRes.data.requests || []);
+      }
 
-  setPanelLoading(true);
+      if (user.role === 'owner') {
+        // 2. Fetch Owner Analytics
+        const ansRes = await safeApiFetch('/api/owner/analytics');
+        if (ansRes.success && ansRes.data) {
+          setAnalytics(ansRes.data);
+        }
 
-  try {
-    // 1. Fetch Requests
-    const reqRes = await safeApiFetch('/api/requests');
-    if (reqRes.success && reqRes.data) {
-      setRequests(reqRes.data.requests || []);
+        // 3. Fetch Registered Agencies
+        const ageRes = await safeApiFetch('/api/agencies');
+        if (ageRes.success && ageRes.data) {
+          setAgencies(ageRes.data.agencies || []);
+        }
+
+        // 4. Fetch All Properties (Global catalog)
+        const prpRes = await safeApiFetch('/api/properties?limit=100');
+        if (prpRes.success && prpRes.data) {
+          setAllProperties(prpRes.data.properties || []);
+        }
+      } else {
+        // Agency mode: fetch only own properties
+        const prpRes = await safeApiFetch(`/api/properties?agency_id=${user.agencyId}&limit=100`);
+        if (prpRes.success && prpRes.data) {
+          setAgencyProperties(prpRes.data.properties || []);
+        }
+      }
+    } catch (e) {
+      console.error('Error loading backend dashboard:', e);
+    } finally {
+      setPanelLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      loadDashboardData();
+      // Route appropriately
+      if (user.role === 'owner') {
+        setActivePanel('analytics');
+      } else {
+        setActivePanel('my-properties');
+      }
+    }
+  }, [user]);
+
+  // ---------------------------------------------------------------------------
+  // AUTH ROUTINES
+  // ---------------------------------------------------------------------------
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username || !password) {
+      setAuthError('يرجى تعبئة اسم المستخدم وكلمة المرور للدخول.');
+      return;
     }
 
-    if (user.role === 'owner') {
-      // 2. Analytics
-      const ansRes = await safeApiFetch('/api/owner/analytics');
-      if (ansRes.success && ansRes.data) {
-        setAnalytics(ansRes.data);
+    setAuthLoading(true);
+    setAuthError(null);
+
+    try {
+      const res = await safeApiFetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+
+      if (!res.success || !res.data) {
+        throw new Error(res.error || 'خطأ في اسم المستخدم أو كلمة المرور.');
       }
 
-      // 3. Agencies
-      const ageRes = await safeApiFetch('/api/agencies');
-      if (ageRes.success && ageRes.data) {
-        setAgencies(ageRes.data.agencies || []);
+      if (res.data.token) {
+        localStorage.setItem('token', res.data.token);
       }
 
-      // 4. Properties
-      const prpRes = await safeApiFetch('/api/properties?limit=100');
-      if (prpRes.success && prpRes.data) {
-        setAllProperties(prpRes.data.properties || []);
-      }
-
-    } else {
-      // Agency mode
-      const prpRes = await safeApiFetch(
-        `/api/properties?agency_id=${user.agencyId}&limit=100`
-      );
-
-      if (prpRes.success && prpRes.data) {
-        setAgencyProperties(prpRes.data.properties || []);
-      }
+      onLoginSuccess(res.data.user);
+    } catch (err: any) {
+      setAuthError(err.message || 'فشل تسجيل الدخول. يرجى التحقق من الحساب.');
+    } finally {
+      setAuthLoading(false);
     }
-
-  } catch (e) {
-    console.error('Error loading backend dashboard:', e);
-  } finally {
-    setPanelLoading(false);
-  }
-};
+  };
 
   const handleUpdateCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,34 +202,6 @@ const loadDashboardData = async () => {
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-  e.preventDefault();
-
-  setAuthLoading(true);
-  setAuthError(null);
-
-  try {
-    const res = await safeApiFetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username,
-        password
-      })
-    });
-
-    if (!res.success || !res.data) {
-      throw new Error(res.error || 'فشل تسجيل الدخول');
-    }
-
-    onLoginSuccess(res.data.user);
-
-  } catch (err: any) {
-    setAuthError(err.message);
-  } finally {
-    setAuthLoading(false);
-  }
-};
   // ---------------------------------------------------------------------------
   // OWNER ACTION ROUTINES
   // ---------------------------------------------------------------------------
