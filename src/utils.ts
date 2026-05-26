@@ -37,37 +37,25 @@ export async function safeApiFetch<T = any>(
   options: RequestInit = {}
 ): Promise<{ success: boolean; data?: T; error?: string; message?: string }> {
   try {
-    // 1. Point relative API or upload requests to the correct Cloudflare Workers backend URL
+    // 1. Point relative API or upload requests ALWAYS to the correct Cloudflare Workers backend URL
     let finalUrl = url;
     if (url.startsWith('/api/') || url.startsWith('/uploads/')) {
-      const isSandboxOrLocal = typeof window !== 'undefined' && (
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1' ||
-        window.location.hostname.includes('ais-dev') ||
-        window.location.hostname.includes('ais-pre')
-      );
-
-      if (isSandboxOrLocal) {
-        // Use relative path for local development and sandbox environments
-        finalUrl = url;
-      } else {
-        // Use production api domain
-        finalUrl = `https://estate-api.iraq-estate.workers.dev${url}`;
-      }
+      finalUrl = `https://estate-api.iraq-estate.workers.dev${url}`;
     }
 
     // 2. Clone headers and inject dynamic Authorization token from LocalStorage
     const headers = new Headers(options.headers || {});
-    const token = localStorage.getItem('token');
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }
     
-    // 3. Complete and assign cloned request options
+    // 3. Complete and assign cloned request options with COR/Credential overrides
     const finalOptions: RequestInit = {
       ...options,
       headers,
-      credentials: 'include' // Allow backend cookie management across origins
+      mode: 'cors',        // Force CORS mode
+      credentials: 'omit'  // Reject third-party cookies as requested to bypass strict cross-origin credentials policies
     };
 
     const response = await fetch(finalUrl, finalOptions);
@@ -87,7 +75,7 @@ export async function safeApiFetch<T = any>(
       } catch (e) {
         return {
           success: false,
-          error: `خطأ من الخادم (${response.status}): ${rawText.substring(0, 150) || 'استجابة فارغة'}`,
+          error: `NETWORK_ERROR`,
           message: `خطأ من الخادم (${response.status}): ${rawText.substring(0, 150) || 'استجابة فارغة'}`
         };
       }
@@ -112,7 +100,7 @@ export async function safeApiFetch<T = any>(
       console.error('[API JSON Error] Failed to parse JSON. Raw body:', rawText);
       return {
         success: false,
-        error: `استجابة غير صالحة من السرفر: ${parseErr.message}`,
+        error: `NETWORK_ERROR`,
         message: `استجابة غير صالحة من السرفر: ${parseErr.message}`
       };
     }
@@ -120,7 +108,7 @@ export async function safeApiFetch<T = any>(
     console.error(`[Network Exception] Request failed to ${url}:`, err);
     return {
       success: false,
-      error: `فشل الاتصال بالشبكة أو الخادم: ${err.message || err}`,
+      error: 'NETWORK_ERROR',
       message: `فشل الاتصال بالشبكة أو الخادم: ${err.message || err}`
     };
   }

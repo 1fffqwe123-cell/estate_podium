@@ -281,6 +281,7 @@ export default {
 
         return jsonResponse({
           status: 'success',
+          token,
           user: {
             id: user.id,
             username: user.username,
