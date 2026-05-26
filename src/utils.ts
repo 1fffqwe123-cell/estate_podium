@@ -37,11 +37,10 @@ export async function safeApiFetch<T = any>(
   options: RequestInit = {}
 ): Promise<{ success: boolean; data?: T; error?: string; message?: string }> {
   try {
-    // 1. Clean and normalize relative paths to point to absolute Cloudflare Workers production domain
+    // 1. Point to relative API paths starting with /
     let finalUrl = url;
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      const cleanPath = url.startsWith('/') ? url : `/${url}`;
-      finalUrl = `https://estate-api.iraq-estate.workers.dev${cleanPath}`;
+      finalUrl = url.startsWith('/') ? url : `/${url}`;
     }
 
     // 2. Clone headers and inject dynamic Authorization token from LocalStorage safely
